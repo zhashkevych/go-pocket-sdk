@@ -1,4 +1,4 @@
-module github.com/zhashkevych/go-getpocket-sdk
+module github.com/zhashkevych/go-pocket-sdk
 
 go 1.15
 
