@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -18,13 +18,10 @@ const (
 	authorizeUrl = "https://getpocket.com/auth/authorize?request_token=%s&redirect_uri=%s"
 
 	endpointAdd          = "/add"
-	endpointModify       = "/modify"
-	endpointRetrieve     = "/retrieve"
 	endpointRequestToken = "/oauth/request"
 	endpointAuthorize    = "/oauth/authorize"
 
-	xErrorHeader     = "X-Error"
-	xErrorCodeHeader = "X-Error-Code"
+	xErrorHeader = "X-Error"
 
 	defaultTimeout = 5 * time.Second
 )
@@ -33,10 +30,6 @@ type (
 	requestTokenRequest struct {
 		ConsumerKey string `json:"consumer_key"`
 		RedirectURI string `json:"redirect_uri"`
-	}
-
-	requestTokenResponse struct {
-		Code string `json:"code"`
 	}
 
 	authorizeRequest struct {
@@ -49,6 +42,7 @@ type (
 		Username    string `json:"username"`
 	}
 
+	// AddInput holds data necessary to create new item in Pocket list
 	AddInput struct {
 		URL         string
 		Title       string
@@ -58,21 +52,16 @@ type (
 
 	addRequest struct {
 		URL         string `json:"url"`
-		Title       string `json:"title"`
-		Tags        string `json:"tags"`
+		Title       string `json:"title,omitempty"`
+		Tags        string `json:"tags,omitempty"`
 		AccessToken string `json:"access_token"`
 		ConsumerKey string `json:"consumer_key"`
 	}
-
-	//errorResponse struct {
-	//	Code    string
-	//	Message string
-	//}
 )
 
 func (i AddInput) generateRequest(consumerKey string) addRequest {
 	return addRequest{
-		URL:         url.QueryEscape(i.URL),
+		URL:         i.URL,
 		Tags:        strings.Join(i.Tags, ","),
 		Title:       i.Title,
 		AccessToken: i.AccessToken,
@@ -80,11 +69,13 @@ func (i AddInput) generateRequest(consumerKey string) addRequest {
 	}
 }
 
+// Client is a getpocket API client
 type Client struct {
 	client      *http.Client
 	consumerKey string
 }
 
+// NewClient creates a new client instance with your app key (to generate key visit https://getpocket.com/developer/apps/)
 func NewClient(consumerKey string) *Client {
 	return &Client{
 		client: &http.Client{
@@ -94,90 +85,85 @@ func NewClient(consumerKey string) *Client {
 	}
 }
 
+// GetRequestToken obtains the request token that is used to authorize user in your application
 func (c *Client) GetRequestToken(ctx context.Context, redirectUrl string) (string, error) {
-	resp := &requestTokenResponse{}
 	inp := &requestTokenRequest{
 		ConsumerKey: c.consumerKey,
 		RedirectURI: redirectUrl,
 	}
 
-	if err := c.doHTTP(ctx, endpointRequestToken, inp, resp); err != nil {
+	values, err := c.doHTTP(ctx, endpointRequestToken, inp)
+	if err != nil {
 		return "", err
 	}
 
-	return resp.Code, nil
+	return values.Get("code"), nil
 }
 
+// GetAuthorizationURL generates link to authorize user
 func (c *Client) GetAuthorizationURL(requestToken, redirectUrl string) string {
 	return fmt.Sprintf(authorizeUrl, requestToken, redirectUrl)
 }
 
+// Authorize generates access token for user, that authorized in your app via link
 func (c *Client) Authorize(ctx context.Context, requestToken string) (*AuthorizeResponse, error) {
-	resp := &AuthorizeResponse{}
 	inp := &authorizeRequest{
 		Code:        requestToken,
 		ConsumerKey: c.consumerKey,
 	}
 
-	if err := c.doHTTP(ctx, endpointAuthorize, inp, resp); err != nil {
+	values, err := c.doHTTP(ctx, endpointAuthorize, inp)
+	if err != nil {
 		return nil, err
 	}
 
-	return resp, nil
+	return &AuthorizeResponse{
+		AccessToken: values.Get("access_token"),
+		Username:    values.Get("username"),
+	}, nil
 }
 
+// Add creates new item in Pocket list
 func (c *Client) Add(ctx context.Context, input AddInput) error {
 	req := input.generateRequest(c.consumerKey)
-
-	if err := c.doHTTP(ctx, endpointAdd, req, nil); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := c.doHTTP(ctx, endpointAdd, req)
+	return err
 }
 
-func (c *Client) Modify(ctx context.Context) {
-
-}
-
-func (c *Client) Retrieve(ctx context.Context) {
-
-}
-func (c *Client) doHTTP(ctx context.Context, endpoint string, body, response interface{}) error {
+func (c *Client) doHTTP(ctx context.Context, endpoint string, body interface{}) (url.Values, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
-		return err
+		return url.Values{}, errors.WithMessage(err, "failed to marshal input body")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+endpoint, bytes.NewBuffer(b))
 	if err != nil {
-		return err
+		return url.Values{}, errors.WithMessage(err, "failed to create new request")
 	}
 
 	req.Header.Set("Content-Type", "application/json; charset=UTF8")
-	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return err
+		return url.Values{}, errors.WithMessage(err, "failed to send http request")
 	}
 
 	defer resp.Body.Close()
 
-
 	if resp.StatusCode != http.StatusOK {
-		return errors.New(resp.Header.Get(xErrorHeader))
-
-	}
-
-	if response == nil {
-		return nil
+		err := fmt.Sprintf("API Error: %s", resp.Header.Get(xErrorHeader))
+		return url.Values{}, errors.New(err)
 	}
 
 	respB, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return url.Values{}, errors.WithMessage(err, "failed to read request body")
 	}
 
-	return json.Unmarshal(respB, response)
+	values, err := url.ParseQuery(string(respB))
+	if err != nil {
+		return url.Values{}, errors.WithMessage(err, "failed to parse response body")
+	}
+
+	return values, nil
 }
