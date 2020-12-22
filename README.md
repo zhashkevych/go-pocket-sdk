@@ -9,7 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
-	pocket "github.com/zhashkevych/go-getpocket-sdk"
+	pocket "github.com/zhashkevych/go-pocket-sdk"
 	"log"
 )
 
