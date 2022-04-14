@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -245,7 +246,7 @@ func TestClient_Add(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				input: AddInput{
-					URL: "http://example.link",
+					URL:         "http://example.link",
 					AccessToken: "token",
 				},
 			},
@@ -276,9 +277,9 @@ func TestClient_Add(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				input: AddInput{
-					URL: "http://example.link",
+					URL:         "http://example.link",
 					AccessToken: "token",
-					Title: "example",
+					Title:       "example",
 				},
 			},
 			expectedStatusCode: 200,
@@ -288,10 +289,10 @@ func TestClient_Add(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				input: AddInput{
-					URL: "http://example.link",
+					URL:         "http://example.link",
 					AccessToken: "token",
-					Title: "example",
-					Tags: []string{"qwe", "rty", "123"},
+					Title:       "example",
+					Tags:        []string{"qwe", "rty", "123"},
 				},
 			},
 			expectedStatusCode: 200,
@@ -301,14 +302,14 @@ func TestClient_Add(t *testing.T) {
 			args: args{
 				ctx: context.Background(),
 				input: AddInput{
-					URL: "http://example.link",
+					URL:         "http://example.link",
 					AccessToken: "token",
-					Title: "example",
-					Tags: []string{"qwe", "rty", "123"},
+					Title:       "example",
+					Tags:        []string{"qwe", "rty", "123"},
 				},
 			},
 			expectedStatusCode: 400,
-			wantErr: true,
+			wantErr:            true,
 		},
 	}
 
@@ -319,6 +320,66 @@ func TestClient_Add(t *testing.T) {
 			if err := c.Add(tt.args.ctx, tt.args.input); (err != nil) != tt.wantErr {
 				t.Errorf("Add() error = %v, wantErr %v", err, tt.wantErr)
 			}
+		})
+	}
+}
+
+func TestNewClient(t *testing.T) {
+	customHTTPClient := &http.Client{
+		Timeout: 0,
+	}
+
+	type args struct {
+		consumerKey string
+		options     []ClientOption
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *Client
+		wantErr error
+	}{
+		{
+			name: "default client",
+			args: args{
+				consumerKey: "key",
+			},
+			want: &Client{
+				client: &http.Client{
+					Timeout: defaultTimeout,
+				},
+				consumerKey: "key",
+			},
+			wantErr: nil,
+		},
+		{
+			name: "custom client",
+			args: args{
+				consumerKey: "key",
+				options: []ClientOption{
+					WithHTTPClient(customHTTPClient),
+				},
+			},
+			want: &Client{
+				client: &http.Client{
+					Timeout: 0,
+				},
+				consumerKey: "key",
+			},
+			wantErr: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewClient(tt.args.consumerKey, tt.args.options...)
+
+			if tt.wantErr != nil {
+				require.NoError(t, err)
+			} else {
+				assert.Equal(t, tt.wantErr, err)
+			}
+
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

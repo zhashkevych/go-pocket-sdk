@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -25,6 +26,16 @@ const (
 	xErrorHeader = "X-Error"
 
 	defaultTimeout = 5 * time.Second
+)
+
+var (
+	ErrURLValueIsEmpty             = errors.New("required URL value is empty")
+	ErrAccessTokenIsEmpty          = errors.New("access token is empty")
+	ErrConsumerKeyIsEmpty          = errors.New("consumer key is empty")
+	ErrEmptyRequestTokenInResponse = errors.New("empty request token in API response")
+	ErrEmptyParams                 = errors.New("empty params")
+	ErrEmptyRequestToken           = errors.New("empty request token")
+	ErrEmptyAccessTokenInResponse  = errors.New("empty access token in API response")
 )
 
 type (
@@ -58,15 +69,18 @@ type (
 		Tags        []string
 		AccessToken string
 	}
+
+	// ClientOption allows manipulating client settings
+	ClientOption func(*Client)
 )
 
 func (i AddInput) validate() error {
 	if i.URL == "" {
-		return errors.New("required URL values is empty")
+		return ErrURLValueIsEmpty
 	}
 
 	if i.AccessToken == "" {
-		return errors.New("access token is empty")
+		return ErrAccessTokenIsEmpty
 	}
 
 	return nil
@@ -89,17 +103,23 @@ type Client struct {
 }
 
 // NewClient creates a new client instance with your app key (to generate key visit https://getpocket.com/developer/apps/)
-func NewClient(consumerKey string) (*Client, error) {
+func NewClient(consumerKey string, options ...ClientOption) (*Client, error) {
 	if consumerKey == "" {
-		return nil, errors.New("consumer key is empty")
+		return nil, ErrConsumerKeyIsEmpty
 	}
 
-	return &Client{
+	client := &Client{
 		client: &http.Client{
 			Timeout: defaultTimeout,
 		},
 		consumerKey: consumerKey,
-	}, nil
+	}
+
+	for _, opt := range options {
+		opt(client)
+	}
+
+	return client, nil
 }
 
 // GetRequestToken obtains the request token that is used to authorize user in your application
@@ -115,7 +135,7 @@ func (c *Client) GetRequestToken(ctx context.Context, redirectUrl string) (strin
 	}
 
 	if values.Get("code") == "" {
-		return "", errors.New("empty request token in API response")
+		return "", ErrEmptyRequestTokenInResponse
 	}
 
 	return values.Get("code"), nil
@@ -124,7 +144,7 @@ func (c *Client) GetRequestToken(ctx context.Context, redirectUrl string) (strin
 // GetAuthorizationURL generates link to authorize user
 func (c *Client) GetAuthorizationURL(requestToken, redirectUrl string) (string, error) {
 	if requestToken == "" || redirectUrl == "" {
-		return "", errors.New("empty params")
+		return "", ErrEmptyParams
 	}
 
 	return fmt.Sprintf(authorizeUrl, requestToken, redirectUrl), nil
@@ -133,7 +153,7 @@ func (c *Client) GetAuthorizationURL(requestToken, redirectUrl string) (string, 
 // Authorize generates access token for user, that authorized in your app via link
 func (c *Client) Authorize(ctx context.Context, requestToken string) (*AuthorizeResponse, error) {
 	if requestToken == "" {
-		return nil, errors.New("empty request token")
+		return nil, ErrEmptyRequestToken
 	}
 
 	inp := &authorizeRequest{
@@ -148,7 +168,7 @@ func (c *Client) Authorize(ctx context.Context, requestToken string) (*Authorize
 
 	accessToken, username := values.Get("access_token"), values.Get("username")
 	if accessToken == "" {
-		return nil, errors.New("empty access token in API response")
+		return nil, ErrEmptyAccessTokenInResponse
 	}
 
 	return &AuthorizeResponse{
@@ -205,4 +225,10 @@ func (c *Client) doHTTP(ctx context.Context, endpoint string, body interface{}) 
 	}
 
 	return values, nil
+}
+
+func WithHTTPClient(httpClient *http.Client) ClientOption {
+	return func(client *Client) {
+		client.client = httpClient
+	}
 }
