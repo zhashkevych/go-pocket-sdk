@@ -16,13 +16,20 @@ import (
 func main()  {
 	ctx := context.Background()
 
-	client := pocket.NewClient("<your-consumer-key>") // you can generate key at https://getpocket.com/developer/apps/
+	client, err := pocket.NewClient("<your-consumer-key>") // you can generate key at https://getpocket.com/developer/apps/
+	if err != nil {
+		log.Fatalf(`Couldn't create new client: %v`, err)
+	}
+
 	requestToken, err := client.GetRequestToken(ctx, "http://example.com/")
 	if err != nil {
 		log.Fatalf("failed to get request token: %s", err.Error())
 	}
 
-	url	:= client.GetAuthorizationURL(requestToken, "http://example.com/")
+	url, err := client.GetAuthorizationURL(requestToken, "http://example.com/")
+	if err != nil {
+		log.Fatalf(`Couldn't get authorization url: %v`, err)
+	}
 	fmt.Println(url)
 
 	authResp, err := client.Authorize(ctx, requestToken)
