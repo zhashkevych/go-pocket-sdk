@@ -2,6 +2,7 @@ package pocket
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -44,7 +45,7 @@ const (
 	SITE   Sort = "site"
 )
 
-type GetPocketDataBody struct {
+type RequestGetEntries struct {
 	ConsumerKey string `json:"consumer_key"`
 	AccessToken string `json:"access_token"`
 
@@ -94,30 +95,20 @@ type GetPocketDataBody struct {
 
 // GetUnreadEntries
 func (c *Client) GetUnreadEntries(accessToken string) error {
-	// ctx := context.Background()
-	// getPocketDataBody := GetPocketDataBody{
-	// 	AccessToken: accessToken,
-	// 	State:       UNREAD,
-	// 	Sort:        OLDEST,
-	// 	Offset:      Offset,
-	// }
+	ctx := context.Background()
+	bodyData := RequestGetEntries{
+		AccessToken: accessToken,
+		State:       UNREAD,
+		Sort:        OLDEST,
+		Offset:      Offset,
+	}
 
-	// jsonBodyData, err := json.Marshal(getPocketDataBody)
-	// if err != nil {
-	// 	return fmt.Errorf("error while marshalling 'get unread entries body': %v", err)
-	// }
+	values, err := c.DoHTTP(ctx, PocketDataURL, bodyData)
+	if err != nil {
+		return err
+	}
 
-	// req, err := http.NewRequest(http.MethodGet, PocketDataURL, bytes.NewBuffer(jsonBodyData))
-	// if err != nil {
-	// 	return fmt.Errorf("error while creating new 'get unread entries' %v", err)
-	// }
-
-	// respBody, err := c.DoHTTP(ctx, "", nil)
-	// if err != nil {
-	// 	return fmt.Errorf("error while doing the request: %v", err)
-	// }
-
-	// fmt.Println(string(respBody))
+	fmt.Println(values)
 	return nil
 }
 
